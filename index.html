@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POLES Master Admin - منظومة الاستخبارات السياسية والشركات</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <style>
+    #map { height: 100%; width: 100%; min-height: 460px; }
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col font-sans overflow-hidden">
+
+  <!-- Main System Header -->
+  <header class="bg-slate-900 border-b border-slate-800 px-6 py-3 flex justify-between items-center shadow-md shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="bg-blue-600 text-white font-black px-3.5 py-1.5 rounded-xl text-sm tracking-wide shadow-sm">POLES</div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-bold text-slate-100">المنظومة الأم للتحليل الاستخباراتي والسياسي</h1>
+          <span class="bg-blue-950 text-blue-400 border border-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-md">Live News Beta</span>
+        </div>
+        <p class="text-[11px] text-slate-400">مركز المراقبة الجغرافية الفضائية والربط الإخباري المباشر</p>
+      </div>
+    </div>
+
+    <!-- API & Tab Controls -->
+    <div class="flex items-center gap-3">
+      <input type="password" id="adminApiKey" placeholder="مفتاح Gemini API الأساسي" class="text-xs bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-blue-500 w-48">
+      
+      <div class="bg-slate-900 p-1 rounded-xl flex gap-1 border border-slate-800">
+        <button onclick="switchTab('radarTab')" id="tabRadarBtn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition">🛰️ الرادار الاستخباراتي</button>
+        <button onclick="switchTab('studioTab')" id="tabStudioBtn" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">⚙️ مصنع بوتات الشركات (B2B)</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Content Container -->
+  <main class="flex-1 p-4 overflow-hidden flex flex-col">
+    
+    <!-- Tab 1: Radar & Satellite Scanner -->
+    <div id="radarTab" class="w-full h-full flex flex-col lg:flex-row gap-4 overflow-hidden">
+      <div class="flex-1 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-lg">
+        <div class="p-3 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+          <div class="flex items-center gap-2">
+            <button onclick="switchLayer('esri')" class="bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 text-xs px-3 py-1.5 rounded-lg font-bold transition">🛰️ قمر صناعي (Esri)</button>
+            <button onclick="switchLayer('osm')" class="bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 text-xs px-3 py-1.5 rounded-lg font-bold transition">🗺️ خريطة سياسية (OSM)</button>
+          </div>
+          <button onclick="scanCurrentViewport()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3.5 py-1.5 rounded-lg font-bold shadow transition flex items-center gap-1.5">
+            🌐 تحليل المخاطر الجيوسياسية والأخبار الحية
+          </button>
+        </div>
+        <div id="map" class="flex-1"></div>
+      </div>
+
+      <!-- Intelligence Report Feed -->
+      <div class="w-full lg:w-96 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-lg overflow-hidden">
+        <div class="p-3 border-b border-slate-800 bg-slate-900/50 font-bold text-xs text-slate-300 flex justify-between items-center">
+          <span>تقرير الاستخبارات والأخبار العالمية</span>
+          <span id="scanStatus" class="text-[10px] text-blue-400">جاهز للمسح</span>
+        </div>
+        <div id="intelReportBox" class="flex-1 p-4 text-xs text-slate-300 overflow-y-auto leading-relaxed custom-scroll">
+          حدد المنطقة الجغرافية المستهدفة واضغط على زر التحليل لتوليد تقرير استخباراتي حي يربط لقطة القمر الصناعي بالأخبار السياسية المنشورة عالمياً.
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Bot Studio -->
+    <div id="studioTab" class="hidden w-full h-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg overflow-y-auto custom-scroll">
+      <div class="max-w-4xl mx-auto">
+        <div class="border-b border-slate-800 pb-4 mb-6">
+          <h2 class="text-base font-bold text-slate-100">مصنع البوتات المشفرة والمربوطة بالأخبار (B2B Studio)</h2>
+          <p class="text-xs text-slate-400 mt-1">توليد واجهات مستقلة للشركات متصلة بمحركات البحث الإخباري العالمي مع تشفير كامل للترخيص.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">اسم الشركة / المؤسسة المستهدفة</label>
+              <input type="text" id="studioClientName" placeholder="مثلاً: شركة الخليج العربي للنفط" class="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl p-3 focus:outline-blue-500">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">مجال المخاطر والقطاع الاستراتيجي</label>
+              <select id="studioSector" class="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl p-3 focus:outline-blue-500">
+                <option value="المنشآت النفطية والطاقة وسلاسل الإمداد">المنشآت النفطية والطاقة وسلاسل الإمداد</option>
+                <option value="الموانئ البحرية والأمن اللوجستي والتجاري">الموانئ البحرية والأمن اللوجستي والتجاري</option>
+                <option value="الأمن السيبراني والمخاطر السياسية والجيوسياسية">الأمن السيبراني والمخاطر السياسية والجيوسياسية</option>
+                <option value="البنية التحتية والاستشارات الأمنية والسيادية">البنية التحتية والاستشارات الأمنية والسيادية</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">فترة صلاحية الترخيص (الاشتراك)</label>
+              <select id="studioDuration" class="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl p-3 focus:outline-blue-500">
+                <option value="1">تجربة سريعة (يوم واحد)</option>
+                <option value="7">تجربة أسبوعية (7 أيام)</option>
+                <option value="30">ترخيص شهري (30 يوماً)</option>
+                <option value="90">ترخيص فصلي (90 يوماً)</option>
+                <option value="365">ترخيص سنوي كامل (سنة كاملة)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">تعليمات التحذير الخاصة بالبوت (System Instructions)</label>
+              <textarea id="studioPrompt" rows="3" class="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl p-3 focus:outline-blue-500">أنت بوت الاستخبارات والإنذار المبكر التابع لمنظومة POLES والمخصص لحماية وتحذير هذه الشركة. ابحث دائماً في أحدث الأخبار العالمية السياسية والجيوسياسية وقدم تحليلات دقيقة مع تنبيه الإدارة فوراً عن أي تهديدات.</textarea>
+            </div>
+
+            <button onclick="createClientBot()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3.5 rounded-xl shadow transition">
+              ⚡ توليد رابط الشركة المشفر والمتصل بالأخبار
+            </button>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-bold text-slate-200">الرابط المشفّر المحمي:</h3>
+                <span class="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded-md font-mono">AES + Live Search</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mb-4 leading-relaxed">
+                هذا الرابط يمنح العميل بوت متصل بالأخبار الحية عالمياً مع حماية كاملة ضد تعديل تاريخ الصلاحية.
+              </p>
+              
+              <div id="generatedLinkBox" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-400 font-mono break-all min-h-[120px] flex items-center justify-center text-center">
+                قم بإدخال بيانات الشركة واضغط زر التوليد أعلاه
+              </div>
+            </div>
+
+            <div class="mt-4 flex gap-2">
+              <button onclick="copyGeneratedLink()" class="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl transition">
+                📋 نسخ الرابط
+              </button>
+              <button onclick="testClientLink()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 rounded-xl transition">
+                👁️ معاينة البوت المستقل
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const SECRET_KEY = "POLES_MASTER_SECRET_KEY_2026";
+
+    function switchTab(target) {
+      document.getElementById('radarTab').classList.add('hidden');
+      document.getElementById('studioTab').classList.add('hidden');
+      document.getElementById(target).classList.remove('hidden');
+
+      const radarBtn = document.getElementById('tabRadarBtn');
+      const studioBtn = document.getElementById('tabStudioBtn');
+
+      if (target === 'radarTab') {
+        radarBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition";
+        studioBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition";
+        map.invalidateSize();
+      } else {
+        studioBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition";
+        radarBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition";
+      }
+    }
+
+    const map = L.map('map').setView([28.0, 17.5], 6);
+    const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 });
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 });
+    esriLayer.addTo(map);
+
+    function switchLayer(layer) {
+      if (layer === 'esri') { map.removeLayer(osmLayer); map.addLayer(esriLayer); }
+      else { map.removeLayer(esriLayer); map.addLayer(osmLayer); }
+    }
+
+    async function scanCurrentViewport() {
+      const apiKey = document.getElementById('adminApiKey').value.trim() || localStorage.getItem('poles_admin_key');
+      if (!apiKey) { alert("يرجى إدخال مفتاح Gemini API الأساسي أولاً."); return; }
+      localStorage.setItem('poles_admin_key', apiKey);
+
+      const status = document.getElementById('scanStatus');
+      const reportBox = document.getElementById('intelReportBox');
+
+      status.innerText = "جاري مسح الإحداثيات والبحث الإخباري...";
+      reportBox.innerHTML = "<div class='text-blue-400 font-bold'>⏳ جاري فحص لقطة القمر الصناعي والبحث في الأخبار السياسية العالمية الحية...</div>";
+
+      try {
+        const canvas = await html2canvas(document.getElementById('map'), { useCORS: true });
+        const base64Img = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+
+        status.innerText = "جاري التحليل والربط الإخباري...";
+        const center = map.getCenter();
+        const prompt = `أنت كبير المحللين الاستخباراتيين في منظومة POLES. حلل إحداثيات الموقع (خط العرض: ${center.lat.toFixed(4)}, خط الطول: ${center.lng.toFixed(4)}). ابحث في الأخبار السياسية والجيوسياسية الحية المنشورة حالياً حول هذه المنطقة وقدم تقريراً يشمل:
+1. طبيعة المنطقة والمعلم الظاهر.
+2. أحدث الأخبار والتطورات السياسية والأمنية الجارية حالياً والمتصلة بهذه المنطقة.
+3. التقييم الاستراتيجي والتوصيات الفورية للشركات.`;
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: "image/jpeg", data: base64Img } }] }],
+            tools: [{ googleSearch: {} }] // تفعيل البحث الإخباري المباشر
+          })
+        });
+
+        const data = await res.json();
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+          reportBox.innerText = data.candidates[0].content.parts[0].text;
+          status.innerText = "اكتمل التقرير الحي";
+        } else {
+          reportBox.innerText = "⚠️ تعذر تحليل اللقطة. تأكد من صحة مفتاح API.";
+          status.innerText = "خطأ في الاتصال";
+        }
+      } catch (err) {
+        reportBox.innerText = "⚠️ خطأ تقني أثناء معالجة البيانات أو البحث في الأخبار.";
+        status.innerText = "خطأ";
+      }
+    }
+
+    let activeClientUrl = "";
+    function createClientBot() {
+      const name = document.getElementById('studioClientName').value.trim() || 'شركة استراتيجية';
+      const sector = document.getElementById('studioSector').value;
+      const prompt = document.getElementById('studioPrompt').value.trim();
+      const days = parseInt(document.getElementById('studioDuration').value);
+
+      const expDate = new Date().getTime() + (days * 24 * 60 * 60 * 1000);
+
+      const payload = JSON.stringify({ name, sector, prompt, exp: expDate });
+      const encryptedData = CryptoJS.AES.encrypt(payload, SECRET_KEY).toString();
+      const safeToken = encodeURIComponent(encryptedData);
+
+      const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+      activeClientUrl = `${window.location.origin}${basePath}client_bot.html?token=${safeToken}`;
+
+      const box = document.getElementById('generatedLinkBox');
+      box.innerText = activeClientUrl;
+      box.className = "bg-slate-900 border border-emerald-500 rounded-xl p-3.5 text-xs text-emerald-400 font-mono break-all min-h-[120px] flex items-center justify-start text-right";
+    }
+
+    function copyGeneratedLink() {
+      if (!activeClientUrl) return alert("يرجى توليد الرابط أولاً.");
+      navigator.clipboard.writeText(activeClientUrl);
+      alert("تم نسخ الرابط المشفر بنجاح!");
+    }
+
+    function testClientLink() {
+      if (!activeClientUrl) return alert("يرجى توليد الرابط أولاً.");
+      window.open(activeClientUrl, '_blank');
+    }
+
+    const savedKey = localStorage.getItem('poles_admin_key');
+    if (savedKey) document.getElementById('adminApiKey').value = savedKey;
+  </script>
+</body>
+</html>

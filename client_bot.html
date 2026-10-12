@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POLES - منصة الإنذار المبكر والأخبار الحية</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <style>
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col font-sans overflow-hidden">
+
+  <!-- Client Header -->
+  <header class="bg-slate-900 border-b border-slate-800 px-6 py-3.5 flex justify-between items-center shadow-md shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="bg-blue-600 text-white font-black px-3.5 py-1.5 rounded-xl text-sm tracking-wide shadow">POLES</div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 id="clientTitle" class="text-sm font-bold text-slate-100">بوابة التحذير والأخبار الاستخباراتية</h1>
+          <span class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md">Live Global Grounding</span>
+        </div>
+        <p id="clientSectorText" class="text-[11px] text-slate-400">قطاع العمل: جاري التحميل...</p>
+      </div>
+    </div>
+
+    <!-- API & Status -->
+    <div class="flex items-center gap-3">
+      <div id="subscriptionBadge" class="bg-slate-800 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-mono">
+        ⏳ فك التشفير والتحقق...
+      </div>
+      <input type="password" id="clientApiKey" placeholder="مفتاح Gemini API للتشغيل" class="text-xs bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-blue-500 w-48">
+    </div>
+  </header>
+
+  <!-- Chat / System Interface -->
+  <main id="mainContainer" class="flex-1 p-4 max-w-4xl mx-auto w-full flex flex-col overflow-hidden">
+    <div class="flex-1 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-lg overflow-hidden">
+      <div class="p-3 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between text-xs text-slate-300 font-bold">
+        <span>🤖 مستشار الأمن الجيوسياسي والأخبار العالمية للشركة</span>
+        <span class="text-[10px] text-emerald-400">🌐 بث إخباري مباشر (Live Search)</span>
+      </div>
+
+      <!-- Messages History -->
+      <div id="chatBox" class="flex-1 p-4 overflow-y-auto space-y-4 text-xs leading-relaxed custom-scroll">
+        <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl text-slate-300">
+          مرحباً بك في بوابة الاستخبارات والإنذار المبكر الخاصة بشركتك. أنا مساعدك الرقمي المربوط بالأخبار والتحليلات الجيوسياسية المباشرة عبر منظومة POLES. يمكنك استفساري عن أي أحداث سياسية، مخاطر ملاحة، أو أزمات طارئة مؤخرة تؤثر على قطاعكم.
+        </div>
+      </div>
+
+      <!-- Input Bar -->
+      <div class="p-3 border-t border-slate-800 bg-slate-900/50 flex gap-2">
+        <input type="text" id="userInput" placeholder="اطرح سؤالك أو استفسارك حول أي أحداث سياسية أو مخاطر راهنة..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-blue-500" onkeypress="if(event.key === 'Enter') sendMessage()">
+        <button onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-6 py-3 rounded-xl transition shadow">
+          إرسال
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Expired or Invalid Overlay -->
+  <div id="expiredModal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-red-900/50 rounded-2xl p-8 max-w-md text-center shadow-2xl">
+      <div class="text-3xl mb-3">⚠️</div>
+      <h2 id="modalTitle" class="text-base font-bold text-red-400 mb-2">انتهت صلاحية ترخيص هذا الرابط</h2>
+      <p id="modalDesc" class="text-xs text-slate-400 leading-relaxed mb-6">
+        لقد انتهت الفترة الزمنية الممنوحة للوصول إلى هذه الواجهة المستقلة. يرجى التواصل مع الإدارة المركزية لمنظومة POLES لتجديد اشتراك شركتكم.
+      </p>
+      <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl text-[11px] text-slate-500 font-mono">
+        Status Code: 403_ACCESS_DENIED
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SECRET_KEY = "POLES_MASTER_SECRET_KEY_2026";
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const encryptedToken = urlParams.get('token');
+
+    let clientName = 'شركة غير معروفة';
+    let clientSector = 'غير محدد';
+    let systemPrompt = '';
+    let expTime = 0;
+    let isValid = false;
+
+    if (encryptedToken) {
+      try {
+        const bytes = CryptoJS.AES.decrypt(decodeURIComponent(encryptedToken), SECRET_KEY);
+        const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
+        
+        if (decryptedText) {
+          const decryptedData = JSON.parse(decryptedText);
+          clientName = decryptedData.name;
+          clientSector = decryptedData.sector;
+          systemPrompt = decryptedData.prompt;
+          expTime = decryptedData.exp;
+          isValid = true;
+        }
+      } catch (e) {
+        isValid = false;
+      }
+    }
+
+    document.getElementById('clientTitle').innerText = clientName;
+    document.getElementById('clientSectorText').innerText = `قطاع العمل والتخصص: ${clientSector}`;
+
+    const now = new Date().getTime();
+    const badge = document.getElementById('subscriptionBadge');
+
+    if (!isValid) {
+      document.getElementById('modalTitle').innerText = "تم التلاعب بالرابط أو البيانات غير صحيحة";
+      document.getElementById('modalDesc').innerText = "فشل التشفير الخاص بهذا الرابط. تم حظر الوصول لحماية النظام.";
+      document.getElementById('expiredModal').classList.remove('hidden');
+      badge.innerText = "❌ رابط غير صالح";
+      badge.className = "bg-red-950 border border-red-800 text-red-400 text-xs px-3 py-1.5 rounded-xl font-mono";
+    } else if (expTime && now > expTime) {
+      document.getElementById('expiredModal').classList.remove('hidden');
+      badge.innerText = "❌ انتهى الاشتراك";
+      badge.className = "bg-red-950 border border-red-800 text-red-400 text-xs px-3 py-1.5 rounded-xl font-mono";
+    } else if (expTime) {
+      const remainingDays = Math.ceil((expTime - now) / (1000 * 60 * 60 * 24));
+      badge.innerText = `🟢 نشط (متبقي ${remainingDays} يوم)`;
+      badge.className = "bg-emerald-950 border border-emerald-800 text-emerald-400 text-xs px-3 py-1.5 rounded-xl font-mono";
+    }
+
+    const savedKey = localStorage.getItem('poles_client_key');
+    if (savedKey) document.getElementById('clientApiKey').value = savedKey;
+
+    async function sendMessage() {
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const apiKey = document.getElementById('clientApiKey').value.trim() || localStorage.getItem('poles_client_key');
+      if (!apiKey) {
+        alert("يرجى إدخال مفتاح Gemini الخاص بك في الحقل العلوي.");
+        return;
+      }
+      localStorage.setItem('poles_client_key', apiKey);
+
+      const chatBox = document.getElementById('chatBox');
+      chatBox.innerHTML += `<div class='bg-blue-950/50 border border-blue-900/50 p-3.5 rounded-xl text-slate-200 ml-8'><b>أنت:</b> ${text}</div>`;
+      input.value = '';
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      const loadingId = 'load_' + Date.now();
+      chatBox.innerHTML += `<div id='${loadingId}' class='bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-blue-400 mr-8'>🌐 جاري البحث في الأخبار العالمية وتحليل موقف شركتكم...</div>`;
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              { role: "user", parts: [{ text: `تعليمات النظام: ${systemPrompt}\n\nالشركة: ${clientName}\nالقطاع: ${clientSector}\n\nسؤال الشركة: ${text}` }] }
+            ],
+            tools: [{ googleSearch: {} }] // البحث الحي في شبكة الأخبار
+          })
+        });
+
+        const data = await res.json();
+        document.getElementById(loadingId).remove();
+
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+          const reply = data.candidates[0].content.parts[0].text;
+          chatBox.innerHTML += `<div class='bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-slate-300 mr-8'><b>مستشار POLES:</b> ${reply}</div>`;
+        } else {
+          chatBox.innerHTML += `<div class='bg-red-950/50 border border-red-900 p-3.5 rounded-xl text-red-400 mr-8'>⚠️ خطأ في الاستجابة. تأكد من صحة المفتاح.</div>`;
+        }
+      } catch (err) {
+        document.getElementById(loadingId).remove();
+        chatBox.innerHTML += `<div class='bg-red-950/50 border border-red-900 p-3.5 rounded-xl text-red-400 mr-8'>⚠️ خطأ في الاتصال بالشبكة.</div>`;
+      }
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+  </script>
+</body>
+</html>
